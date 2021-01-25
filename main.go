@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
@@ -69,17 +70,20 @@ func serve(ctx context.Context, payloads *redis.PubSub) error {
 		case <-ctx.Done():
 			return nil
 		case m := <-ch:
-			log.Info("payload: %+v", m)
+			log.Info("payload: %s", m.Payload)
 
 			p := Payload{}
+
+			json.Unmarshal([]byte(m.Payload), &p)
 
 			jid, err := submitJob(p)
 
 			if err != nil {
 				log.Errorf("[%s] cannot submit payload: %s", p, err)
+				continue
 			}
 
-			log.Infof("[%s]payload submitted as job %s", p, jid)
+			log.Infof("[%s] payload submitted as job %s", p, jid)
 		}
 	}
 
@@ -88,17 +92,17 @@ func serve(ctx context.Context, payloads *redis.PubSub) error {
 // Payload is the data structure for the feature extraction payload.
 type Payload struct {
 	// EndPointRadarbase is the endpoint of the radarbase platform.
-	EndPointRadarbase string
+	EndPointRadarbase string `json:"radarbaseURL"`
 	// UserID is the user id the raw data concerns.
-	UserID string
+	UserID string `json:"userID"`
 	// RawDataPath is the filesystem path referring to the raw data
 	// of the user.
-	RawDataPath string
+	RawDataPath string `json:"rawDataPath"`
 }
 
 // String is a string representation of the payload.
 func (p Payload) String() string {
-	return p.UserID
+	return fmt.Sprintf("%s:%s", p.UserID, p.RawDataPath)
 }
 
 // submitJob submits a HPC job and returns a job id as a string.
