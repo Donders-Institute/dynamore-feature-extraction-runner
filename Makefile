@@ -18,5 +18,8 @@ build_linux_amd64:
 # github-release: build
 # 	scripts/gh-release.sh $(VERSION) false
 
+test:
+	@GOPATH=$(GOPATH) GOOS=$(GOOS) GOARCH=amd64 go test -v github.com/Donders-Institute/dynamore-feature-extraction-runner/...
+
 clean:
 	rm -f dynamore-feature-extraction-runner.linux_amd64

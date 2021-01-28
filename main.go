@@ -6,20 +6,27 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/user"
 
 	"github.com/go-redis/redis/v8"
 
-	log "github.com/sirupsen/logrus"
+	"github.com/Donders-Institute/dynamore-feature-extraction-runner/util"
+
+	log "github.com/Donders-Institute/tg-toolset-golang/pkg/logger"
 )
 
 const (
-	defaultRedisURL  = "redis://localhost:6379/0"
-	defaultRedisPass = ""
+	defaultRedisURL     = "redis://localhost:6379/0"
+	defaultRedisPass    = ""
+	defaultRedisChannel = "payload-feature-extraction"
 )
 
 var (
-	rdb         *redis.Client
-	optRedisURL *string
+	rdb             *redis.Client
+	optRedisURL     *string
+	optRedisChannel *string
+	optRunnerUser   *string
+	verbose         *bool
 )
 
 func usage() {
@@ -30,15 +37,37 @@ func usage() {
 
 func init() {
 
+	u, err := user.Current()
+	if err != nil {
+		log.Fatalf("%s", err)
+	}
+
 	// parse commandline arguments
 	optRedisURL = flag.String("d", defaultRedisURL, "set endpoint `url` of the Redis server.")
+	optRedisChannel = flag.String("c", defaultRedisChannel, "set redis `channel` for feature-extraction payloads.")
+	optRunnerUser = flag.String("u", u.Username, "run feature-extraction process/job as the `user`.")
+	verbose = flag.Bool("v", false, "show debug messages.")
 	flag.Usage = usage
 	flag.Parse()
+
+	// config logger
+	cfg := log.Configuration{
+		EnableConsole:     true,
+		ConsoleJSONFormat: false,
+		ConsoleLevel:      log.Info,
+	}
+
+	if *verbose {
+		cfg.ConsoleLevel = log.Debug
+	}
+
+	// initialize logger
+	log.NewLogger(cfg, log.InstanceLogrusLogger)
 
 	// initiate connection to redis server
 	opt, err := redis.ParseURL(*optRedisURL)
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatalf("%s", err)
 	}
 
 	rdb = redis.NewClient(opt)
@@ -49,7 +78,7 @@ func main() {
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
 
-	chanPayload := rdb.Subscribe(ctx, "payload-feature-extraction")
+	chanPayload := rdb.Subscribe(ctx, *optRedisChannel)
 
 	defer func() {
 		chanPayload.Close()
@@ -61,7 +90,14 @@ func main() {
 	}
 }
 
+// serve runs indefinitely and listens to incoming payload message from the redis.
 func serve(ctx context.Context, payloads *redis.PubSub) error {
+
+	// prepare runner credential
+	cred, err := util.GetSyscallCredential(*optRunnerUser)
+	if err != nil {
+		return fmt.Errorf("cannot resolve credential of runner %s: %s", *optRunnerUser, err)
+	}
 
 	ch := payloads.Channel()
 
@@ -70,13 +106,14 @@ func serve(ctx context.Context, payloads *redis.PubSub) error {
 		case <-ctx.Done():
 			return nil
 		case m := <-ch:
-			log.Info("payload: %s", m.Payload)
+			log.Infof("payload: %s", m.Payload)
 
-			p := Payload{}
-
+			// unmarshal redis message to payload struct
+			p := util.Payload{}
 			json.Unmarshal([]byte(m.Payload), &p)
 
-			jid, err := submitJob(p)
+			// submit payload
+			jid, err := p.Submit(cred)
 
 			if err != nil {
 				log.Errorf("[%s] cannot submit payload: %s", p, err)
@@ -87,25 +124,4 @@ func serve(ctx context.Context, payloads *redis.PubSub) error {
 		}
 	}
 
-}
-
-// Payload is the data structure for the feature extraction payload.
-type Payload struct {
-	// EndPointRadarbase is the endpoint of the radarbase platform.
-	EndPointRadarbase string `json:"radarbaseURL"`
-	// UserID is the user id the raw data concerns.
-	UserID string `json:"userID"`
-	// RawDataPath is the filesystem path referring to the raw data
-	// of the user.
-	RawDataPath string `json:"rawDataPath"`
-}
-
-// String is a string representation of the payload.
-func (p Payload) String() string {
-	return fmt.Sprintf("%s:%s", p.UserID, p.RawDataPath)
-}
-
-// submitJob submits a HPC job and returns a job id as a string.
-func submitJob(payload Payload) (string, error) {
-	return "", fmt.Errorf("Not implemented")
 }
