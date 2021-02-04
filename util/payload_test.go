@@ -1,6 +1,7 @@
 package util
 
 import (
+	"os"
 	"testing"
 )
 
@@ -11,7 +12,11 @@ func TestRunJob(t *testing.T) {
 		t.Error(err)
 	}
 
-	p := Payload{}
+	p := Payload{
+		UserID:    "honlee",
+		SessionID: "1",
+		OutputDir: os.TempDir(),
+	}
 
 	if out, err := p.Run(cred); err != nil {
 		t.Error(err)
