@@ -11,10 +11,25 @@ import (
 	log "github.com/Donders-Institute/tg-toolset-golang/pkg/logger"
 )
 
-const (
-	runFeatureStatsWrapper = "/opt/dynamore/run-feature-extract.sh"
-	qsubExec               = "/bin/qsub"
+var (
+	featureStatsExec string
+	qsubExec         string
 )
+
+func init() {
+
+	// set executable paths from env. vars.
+	featureStatsExec = os.Getenv("FEATURE_STATS_EXEC")
+	qsubExec = os.Getenv("QSUB_EXEC")
+
+	// use default if executables are not set.
+	if featureStatsExec == "" {
+		featureStatsExec = "/opt/dynamore/run-feature-stats.sh"
+	}
+	if qsubExec == "" {
+		qsubExec = "/bin/qsub"
+	}
+}
 
 // Payload is the data structure for the feature extraction payload.
 type Payload struct {
@@ -38,7 +53,7 @@ func (p Payload) String() string {
 // `runas` user credential.
 func (p Payload) Run(runas *syscall.Credential) (string, error) {
 
-	cmd := exec.Command(runFeatureStatsWrapper, p.UserID, p.SessionID)
+	cmd := exec.Command(featureStatsExec, p.UserID, p.SessionID)
 
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Credential: runas,
@@ -80,7 +95,7 @@ func (p Payload) Submit(runas *syscall.Credential) (string, error) {
 		"-o", p.OutputDir,
 		"-e", p.OutputDir,
 		"-F", fmt.Sprintf("%s %s", p.UserID, p.SessionID),
-		runFeatureStatsWrapper)
+		featureStatsExec)
 
 	log.Debugf("command: %s", cmd)
 
