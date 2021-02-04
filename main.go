@@ -18,7 +18,7 @@ import (
 const (
 	defaultRedisURL     = "redis://localhost:6379/0"
 	defaultRedisPass    = ""
-	defaultRedisChannel = "payload-feature-extraction"
+	defaultRedisChannel = "dynamore_feature_extraction"
 )
 
 var (
