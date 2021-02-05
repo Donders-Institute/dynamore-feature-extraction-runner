@@ -15,12 +15,6 @@ import (
 	log "github.com/Donders-Institute/tg-toolset-golang/pkg/logger"
 )
 
-const (
-	defaultRedisURL     = "redis://localhost:6379/0"
-	defaultRedisPass    = ""
-	defaultRedisChannel = "dynamore_feature_extraction"
-)
-
 var (
 	rdb             *redis.Client
 	optRedisURL     *string
@@ -42,10 +36,26 @@ func init() {
 		log.Fatalf("%s", err)
 	}
 
+	// load env variables for default values
+	defaultRedisURL := os.Getenv("REDIS_URL")
+	if defaultRedisURL == "" {
+		defaultRedisURL = "redis://localhost:6379/0"
+	}
+
+	defaultRedisChannel := os.Getenv("REDIS_PAYLOAD_CHANNEL")
+	if defaultRedisChannel == "" {
+		defaultRedisChannel = "dynamore_feature_extraction"
+	}
+
+	defaultExecUser := os.Getenv("EXEC_USER")
+	if defaultRedisChannel == "" {
+		defaultExecUser = u.Username
+	}
+
 	// parse commandline arguments
 	optRedisURL = flag.String("d", defaultRedisURL, "set endpoint `url` of the Redis server.")
 	optRedisChannel = flag.String("c", defaultRedisChannel, "set redis `channel` for feature-extraction payloads.")
-	optRunnerUser = flag.String("u", u.Username, "run feature-extraction process/job as the `user`.")
+	optRunnerUser = flag.String("u", defaultExecUser, "run feature-extraction process/job as the `user`.")
 	verbose = flag.Bool("v", false, "show debug messages.")
 	flag.Usage = usage
 	flag.Parse()

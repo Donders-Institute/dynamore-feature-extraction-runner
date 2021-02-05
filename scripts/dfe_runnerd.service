@@ -1,0 +1,14 @@
+[Unit]
+Description=Dynamore feature extraction runner
+After=network.target rsyslog.target local-fs.target
+
+[Service]
+Type=simple
+User=root
+EnvironmentFile=-/etc/sysconfig/dfe_runnerd
+ExecStart=/usr/sbin/dfe_runnerd
+StandardOutput=syslog
+Restart=no
+
+[Install]
+WantedBy=multi-user.target
