@@ -6,4 +6,5 @@ require (
 	github.com/Donders-Institute/tg-toolset-golang v0.0.0-20210112153443-c2a528389dbd
 	github.com/go-redis/redis/v8 v8.4.10
 	github.com/sirupsen/logrus v1.7.0 // indirect
+	golang.org/x/crypto v0.0.0-20200709230013-948cd5f35899
 )

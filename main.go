@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"os/user"
+	"path"
 
 	"github.com/go-redis/redis/v8"
 
@@ -21,6 +22,15 @@ var (
 	optRedisChannel *string
 	optRunnerUser   *string
 	verbose         *bool
+
+	// list of submission hosts of the HPC cluster.
+	hpcSubmitHosts = []string{
+		"mentat001.dccn.nl",
+		"mentat002.dccn.nl",
+		"mentat003.dccn.nl",
+		"mentat004.dccn.nl",
+		"mentat005.dccn.nl",
+	}
 )
 
 func usage() {
@@ -109,6 +119,11 @@ func serve(ctx context.Context, payloads *redis.PubSub) error {
 		return fmt.Errorf("cannot resolve credential of runner %s: %s", *optRunnerUser, err)
 	}
 
+	// provision SSH
+	if err := provisionSSH(); err != nil {
+		return err
+	}
+
 	ch := payloads.Channel()
 
 	for {
@@ -134,4 +149,31 @@ func serve(ctx context.Context, payloads *redis.PubSub) error {
 		}
 	}
 
+}
+
+// provisionSSH prepares the ssh keys in service runner's
+// home directory to allow remote job submission.
+func provisionSSH() error {
+	me, err := user.Current()
+	if err != nil {
+		return fmt.Errorf("cannot identify service user: %s", err)
+	}
+
+	keydir := path.Join(me.HomeDir, ".ssh", "def_runner")
+	if err := os.MkdirAll(keydir, 0700); err != nil {
+		return err
+	}
+
+	sshPrivKey := path.Join(keydir, "id_rsa")
+	sshPubKey := path.Join(keydir, "id_rsa.pub")
+
+	if err := util.GenerateRSAKeyPair(sshPrivKey, sshPubKey); err != nil {
+		return fmt.Errorf("cannot initiate RSA keys for ssh connection: %s", err)
+	}
+
+	if err := util.AddAuthorizedPublicKey(*optRunnerUser, sshPubKey); err != nil {
+		return fmt.Errorf("cannot update authorized_keys: %s", err)
+	}
+
+	return nil
 }
