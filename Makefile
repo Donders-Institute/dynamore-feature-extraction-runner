@@ -13,7 +13,7 @@ all: build
 build: build_linux_amd64
 
 build_linux_amd64:
-	@GOPATH=$(GOPATH) GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o $(GOPATH)/bin/dynamore-feature-extraction-runner.linux_amd64
+	@GOPATH=$(GOPATH) GOOS=linux GOARCH=amd64 CGO_ENABLED=1 go build -o $(GOPATH)/bin/dynamore-feature-extraction-runner.linux_amd64
 
 github-release: build
 	scripts/gh-release.sh $(VERSION) false
