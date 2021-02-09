@@ -157,34 +157,37 @@ func serve(ctx context.Context, payloads *redis.PubSub) error {
 		case <-ctx.Done():
 			return nil
 		case m := <-ch:
-			log.Infof("payload: %s", m.Payload)
-
-			// unmarshal redis message to payload struct
-			p := util.Payload{}
-			json.Unmarshal([]byte(m.Payload), &p)
-
-			// submit payload in one of the following methods:
-			// TODO: make method switch configurable
-			//
-			// method 1: run singularity on local server.
-			// _, err := p.Run(*optRunnerUser)
-			//
-			// method 2: submit job to run singularity using direct qsub.
-			//           The server is the submit host.
-			// jid, err := p.Submit(*optRunnerUser, *optJobReq, *optJobQue)
-			//
-			// method 3: submit job to run singularity via a remote submit host.
-			//           SSH keypair auth required.
-			submitHost := hpcSubmitHosts[rand.Int()%len(hpcSubmitHosts)]
-			jid, err := p.SSHSubmit(*optRunnerUser, *optsJobReq, *optsJobQue, submitHost, sshPrivKey)
-
-			if err != nil {
-				log.Errorf("[%s] cannot submit payload: %s", p, err)
-				continue
-			}
-
-			log.Infof("[%s] payload submitted as job %s", p, jid)
+			go runPayload(m, sshPrivKey)
 		}
 	}
 
+}
+
+func runPayload(m *redis.Message, sshPrivKey string) {
+	log.Infof("payload: %s", m.Payload)
+
+	// unmarshal redis message to payload struct
+	p := util.Payload{}
+	json.Unmarshal([]byte(m.Payload), &p)
+
+	// submit payload in one of the following methods:
+	// TODO: make method switch configurable
+	//
+	// method 1: run singularity on local server.
+	// _, err := p.Run(*optRunnerUser)
+	//
+	// method 2: submit job to run singularity using direct qsub.
+	//           The server is the submit host.
+	// jid, err := p.Submit(*optRunnerUser, *optJobReq, *optJobQue)
+	//
+	// method 3: submit job to run singularity via a remote submit host.
+	//           SSH keypair auth required.
+	submitHost := hpcSubmitHosts[rand.Int()%len(hpcSubmitHosts)]
+	jid, err := p.SSHSubmit(*optRunnerUser, *optsJobReq, *optsJobQue, submitHost, sshPrivKey)
+
+	if err != nil {
+		log.Errorf("[%s] cannot submit payload: %s", p, err)
+	}
+
+	log.Infof("[%s] payload submitted as job %s", p, jid)
 }
