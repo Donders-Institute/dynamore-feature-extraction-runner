@@ -7,14 +7,14 @@ A small deamon that submits HPC job to run feature extraction upon receiving pay
 On a Linux server running CentOS/RedHat, download the RPM package from the release assets, and run
 
 ```bash
-$ yum localinstall dynamore-feature-extraction-runner-0.1.0-1.el7.x86_64.rpm
+$ yum localinstall dynamore-feature-extraction-runner-{version}-1.el7.x86_64.rpm
 ```
 
 A systemd service called `dfe_runnerd` will be enabled and started.
 
 ## Configuration
 
-Uncomment and change the variables in the file is located in `/etc/ysconfig/dfe_runnerd`.  An example can be found [here](scripts/dfe_runnerd.env).
+Uncomment and change the variables in the file is located in `/etc/sysconfig/dfe_runnerd`.  An example can be found [here](scripts/dfe_runnerd.env).
 
 Restart the daemon after changing the values:
 
