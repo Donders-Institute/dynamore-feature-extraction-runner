@@ -14,7 +14,7 @@ A systemd service called `dfe_runnerd` will be enabled and started.
 
 ## Configuration
 
-Uncomment and change the variables in the file is located in `/etc/ysconfig/dfe_runnerd`.  An example can be found [here](scripts/dfe_runnerd.env).
+Uncomment and change the variables in the file is located in `/etc/sysconfig/dfe_runnerd`.  An example can be found [here](scripts/dfe_runnerd.env).
 
 Restart the daemon after changing the values:
 
