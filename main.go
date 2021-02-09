@@ -23,15 +23,17 @@ var (
 	optRedisChannel *string
 	optRunnerUser   *string
 	optSSHKeyDir    *string
+	optsJobQue      *string
+	optsJobReq      *string
 	verbose         *bool
 
-	// list of submission hosts of the HPC cluster.
+	// list of submission hosts (port number is necessary) of the HPC cluster.
 	hpcSubmitHosts = []string{
-		"mentat001.dccn.nl",
-		"mentat002.dccn.nl",
-		"mentat003.dccn.nl",
-		"mentat004.dccn.nl",
-		"mentat005.dccn.nl",
+		"mentat001.dccn.nl:22",
+		"mentat002.dccn.nl:22",
+		"mentat003.dccn.nl:22",
+		"mentat004.dccn.nl:22",
+		"mentat005.dccn.nl:22",
 	}
 )
 
@@ -69,11 +71,18 @@ func init() {
 		defaultSSHKeyDir = path.Join(u.HomeDir, ".ssh", "dfe_runner")
 	}
 
+	defaultJobReq := os.Getenv("TORQUE_JOB_REQUIREMENT")
+	if defaultJobReq == "" {
+		defaultJobReq = "walltime=1:00:00,mem=4gb"
+	}
+
 	// parse commandline arguments
 	optRedisURL = flag.String("d", defaultRedisURL, "set endpoint `url` of the Redis server.")
 	optRedisChannel = flag.String("c", defaultRedisChannel, "set redis `channel` for feature-extraction payloads.")
 	optRunnerUser = flag.String("u", defaultExecUser, "run feature-extraction process/job as the `user`.")
 	optSSHKeyDir = flag.String("k", defaultSSHKeyDir, "`path` in which the the SSH pub/priv keys are created.")
+	optsJobReq = flag.String("l", defaultJobReq, "specify the HPC torque job `requirement`.")
+	optsJobQue = flag.String("q", os.Getenv("TORQUE_JOB_QUEUE"), "specify the HPC torque job `queue`.")
 
 	verbose = flag.Bool("v", false, "show debug messages.")
 	flag.Usage = usage
@@ -162,12 +171,12 @@ func serve(ctx context.Context, payloads *redis.PubSub) error {
 			//
 			// method 2: submit job to run singularity using direct qsub.
 			//           The server is the submit host.
-			// jid, err := p.Submit(*optRunnerUser)
+			// jid, err := p.Submit(*optRunnerUser, *optJobReq, *optJobQue)
 			//
 			// method 3: submit job to run singularity via a remote submit host.
 			//           SSH keypair auth required.
 			submitHost := hpcSubmitHosts[rand.Int()%len(hpcSubmitHosts)]
-			jid, err := p.SSHSubmit(*optRunnerUser, submitHost, sshPrivKey)
+			jid, err := p.SSHSubmit(*optRunnerUser, *optsJobReq, *optsJobQue, submitHost, sshPrivKey)
 
 			if err != nil {
 				log.Errorf("[%s] cannot submit payload: %s", p, err)

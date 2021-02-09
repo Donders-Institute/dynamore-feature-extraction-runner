@@ -45,7 +45,7 @@ type Payload struct {
 	SessionID string `json:"sessionID"`
 	// OutputDir is the filesystem path where the output data is to
 	// be stored.
-	OutputDir string `json:"outputDir"`
+	OutputDir string `json:"outputDirectory"`
 }
 
 // String is a string representation of the payload.
@@ -96,7 +96,7 @@ func (p Payload) Run(runas string) (string, error) {
 
 // Submit sends the feature extraction payload to be run on the HPC cluster.
 // The job is submitted under the credential `runas`.
-func (p Payload) Submit(runas string) (string, error) {
+func (p Payload) Submit(runas, jobReq, jobQueue string) (string, error) {
 
 	// prepare runner credential
 	cred, err := GetSyscallCredential(runas)
@@ -104,14 +104,21 @@ func (p Payload) Submit(runas string) (string, error) {
 		return "", fmt.Errorf("cannot resolve credential of runner %s: %s", runas, err)
 	}
 
-	// run job submission script
-	cmd := exec.Command(qsubExec,
-		"-l", "walltime=1:00:00,mem=4gb",
+	// arguments for `qsubExec`
+	args := []string{
+		"-l", jobReq,
 		"-N", fmt.Sprintf("dynamore-%s-%s", p.UserID, p.SessionID),
 		"-o", p.OutputDir,
 		"-e", p.OutputDir,
 		"-F", fmt.Sprintf("%s %s", p.UserID, p.SessionID),
-		featureStatsExec)
+	}
+	if jobQueue != "" {
+		args = append(args, "-q", jobQueue)
+	}
+	args = append(args, featureStatsExec)
+
+	// run job submission script
+	cmd := exec.Command(qsubExec, args...)
 
 	log.Debugf("command: %s", cmd)
 
@@ -133,7 +140,7 @@ func (p Payload) Submit(runas string) (string, error) {
 // SSHSubmit submits jobs via HPC's access node, using SSH. It requires
 // pubkey authentication to be established between server and the remote
 // user account.
-func (p Payload) SSHSubmit(username string, sshHost string, privateKeyFile string) (string, error) {
+func (p Payload) SSHSubmit(username, jobReq, jobQueue, sshHost, privateKeyFile string) (string, error) {
 
 	// configure the SSH connection
 	privateKey, err := ioutil.ReadFile(privateKeyFile)
@@ -170,16 +177,35 @@ func (p Payload) SSHSubmit(username string, sshHost string, privateKeyFile strin
 	session.Stdout = &out
 
 	// remote ssh command
-	cmd := fmt.Sprintf(
-		`bash -l -c "qsub -l %s -N %s -o %s -e %s -F '%s %s' %s"`,
-		"walltime=1:00:00,mem=4gb",
-		fmt.Sprintf("dynamore-%s-%s", p.UserID, p.SessionID),
-		p.OutputDir,
-		p.OutputDir,
-		p.UserID,
-		p.SessionID,
-		featureStatsExec,
-	)
+	var cmd string
+
+	if jobQueue != "" {
+		// command with specific job queue
+		cmd = fmt.Sprintf(
+			`bash -l -c "qsub -q %s -l %s -N %s -o %s -e %s -F '%s %s' %s"`,
+			jobQueue,
+			jobReq,
+			fmt.Sprintf("dynamore-%s-%s", p.UserID, p.SessionID),
+			p.OutputDir,
+			p.OutputDir,
+			p.UserID,
+			p.SessionID,
+			featureStatsExec,
+		)
+	} else {
+		// command without specific job queue
+		cmd = fmt.Sprintf(
+			`bash -l -c "qsub -l %s -N %s -o %s -e %s -F '%s %s' %s"`,
+			jobReq,
+			fmt.Sprintf("dynamore-%s-%s", p.UserID, p.SessionID),
+			p.OutputDir,
+			p.OutputDir,
+			p.UserID,
+			p.SessionID,
+			featureStatsExec,
+		)
+	}
+
 	log.Debugf("ssh command: %s", cmd)
 
 	// run ssh command
