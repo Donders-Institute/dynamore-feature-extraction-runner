@@ -60,13 +60,13 @@ func init() {
 	}
 
 	defaultExecUser := os.Getenv("EXEC_USER")
-	if defaultRedisChannel == "" {
+	if defaultExecUser == "" {
 		defaultExecUser = u.Username
 	}
 
 	defaultSSHKeyDir := os.Getenv("SSH_KEY_DIR")
 	if defaultSSHKeyDir == "" {
-		defaultSSHKeyDir = path.Join(u.HomeDir, "dfe_runner", "id_rsa")
+		defaultSSHKeyDir = path.Join(u.HomeDir, ".ssh", "dfe_runner")
 	}
 
 	// parse commandline arguments
