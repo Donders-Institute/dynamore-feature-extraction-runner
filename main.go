@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"math/rand"
 	"os"
 	"os/user"
 	"path"
@@ -21,6 +22,7 @@ var (
 	optRedisURL     *string
 	optRedisChannel *string
 	optRunnerUser   *string
+	optSSHKeyDir    *string
 	verbose         *bool
 
 	// list of submission hosts of the HPC cluster.
@@ -62,13 +64,25 @@ func init() {
 		defaultExecUser = u.Username
 	}
 
+	defaultSSHKeyDir := os.Getenv("SSH_KEY_DIR")
+	if defaultSSHKeyDir == "" {
+		defaultSSHKeyDir = path.Join(u.HomeDir, "dfe_runner", "id_rsa")
+	}
+
 	// parse commandline arguments
 	optRedisURL = flag.String("d", defaultRedisURL, "set endpoint `url` of the Redis server.")
 	optRedisChannel = flag.String("c", defaultRedisChannel, "set redis `channel` for feature-extraction payloads.")
 	optRunnerUser = flag.String("u", defaultExecUser, "run feature-extraction process/job as the `user`.")
+	optSSHKeyDir = flag.String("k", defaultSSHKeyDir, "`path` in which the the SSH pub/priv keys are created.")
+
 	verbose = flag.Bool("v", false, "show debug messages.")
 	flag.Usage = usage
 	flag.Parse()
+
+	// create dir for ssh keys
+	if err := os.MkdirAll(*optSSHKeyDir, 0700); err != nil {
+		log.Fatalf("%s", err)
+	}
 
 	// config logger
 	cfg := log.Configuration{
@@ -113,15 +127,18 @@ func main() {
 // serve runs indefinitely and listens to incoming payload message from the redis.
 func serve(ctx context.Context, payloads *redis.PubSub) error {
 
-	// prepare runner credential
-	cred, err := util.GetSyscallCredential(*optRunnerUser)
-	if err != nil {
-		return fmt.Errorf("cannot resolve credential of runner %s: %s", *optRunnerUser, err)
-	}
+	// provision SSH when sshPrivKey does not exist.
+	sshPrivKey := path.Join(*optSSHKeyDir, "id_rsa")
+	sshPubKey := path.Join(*optSSHKeyDir, "id_rsa.pub")
 
-	// provision SSH
-	if err := provisionSSH(); err != nil {
-		return err
+	if _, err := os.Stat(sshPrivKey); os.IsNotExist(err) {
+		if err := util.GenerateRSAKeyPair(sshPrivKey, sshPubKey); err != nil {
+			return fmt.Errorf("cannot initiate RSA keys for ssh connection: %s", err)
+		}
+
+		if err := util.AddAuthorizedPublicKey(*optRunnerUser, sshPubKey); err != nil {
+			return fmt.Errorf("cannot update authorized_keys: %s", err)
+		}
 	}
 
 	ch := payloads.Channel()
@@ -137,8 +154,20 @@ func serve(ctx context.Context, payloads *redis.PubSub) error {
 			p := util.Payload{}
 			json.Unmarshal([]byte(m.Payload), &p)
 
-			// submit payload
-			jid, err := p.Submit(cred)
+			// submit payload in one of the following methods:
+			// TODO: make method switch configurable
+			//
+			// method 1: run singularity on local server.
+			// _, err := p.Run(*optRunnerUser)
+			//
+			// method 2: submit job to run singularity using direct qsub.
+			//           The server is the submit host.
+			// jid, err := p.Submit(*optRunnerUser)
+			//
+			// method 3: submit job to run singularity via a remote submit host.
+			//           SSH keypair auth required.
+			submitHost := hpcSubmitHosts[rand.Int()%len(hpcSubmitHosts)]
+			jid, err := p.SSHSubmit(*optRunnerUser, submitHost, sshPrivKey)
 
 			if err != nil {
 				log.Errorf("[%s] cannot submit payload: %s", p, err)
@@ -149,31 +178,4 @@ func serve(ctx context.Context, payloads *redis.PubSub) error {
 		}
 	}
 
-}
-
-// provisionSSH prepares the ssh keys in service runner's
-// home directory to allow remote job submission.
-func provisionSSH() error {
-	me, err := user.Current()
-	if err != nil {
-		return fmt.Errorf("cannot identify service user: %s", err)
-	}
-
-	keydir := path.Join(me.HomeDir, ".ssh", "def_runner")
-	if err := os.MkdirAll(keydir, 0700); err != nil {
-		return err
-	}
-
-	sshPrivKey := path.Join(keydir, "id_rsa")
-	sshPubKey := path.Join(keydir, "id_rsa.pub")
-
-	if err := util.GenerateRSAKeyPair(sshPrivKey, sshPubKey); err != nil {
-		return fmt.Errorf("cannot initiate RSA keys for ssh connection: %s", err)
-	}
-
-	if err := util.AddAuthorizedPublicKey(*optRunnerUser, sshPubKey); err != nil {
-		return fmt.Errorf("cannot update authorized_keys: %s", err)
-	}
-
-	return nil
 }
