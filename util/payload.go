@@ -22,6 +22,7 @@ var (
 	featureStatsExec string
 	qsubExec         string
 	outRoot          string
+	trqJobName       string
 )
 
 func init() {
@@ -29,6 +30,7 @@ func init() {
 	// set executable paths from env. vars.
 	featureStatsExec = os.Getenv("FEATURE_STATS_EXEC")
 	qsubExec = os.Getenv("QSUB_EXEC")
+	trqJobName = os.Getenv("TORQUE_JOB_NAME")
 	outRoot = os.Getenv("PAYLOAD_OUTPUT_ROOT")
 
 	// use default if executables are not set.
@@ -37,6 +39,9 @@ func init() {
 	}
 	if qsubExec == "" {
 		qsubExec = "/bin/qsub"
+	}
+	if trqJobName == "" {
+		trqJobName = "dynamore-feature-state"
 	}
 }
 
@@ -124,7 +129,7 @@ func (p Payload) Submit(runas, jobReq, jobQueue string) (string, error) {
 	// arguments for `qsubExec`
 	args := []string{
 		"-l", jobReq,
-		"-N", fmt.Sprintf("dynamore-%s-%s", p.UserID, p.SessionID),
+		"-N", trqJobName,
 		"-o", outdir,
 		"-e", outdir,
 		"-F", fmt.Sprintf("%s %s %s", p.UserID, p.SessionID, p.OutputDir),
@@ -208,7 +213,7 @@ func (p Payload) SSHSubmit(username, jobReq, jobQueue, sshHost, privateKeyFile s
 			`bash -l -c "qsub -q %s -l %s -N %s -o %s -e %s -F '%s %s %s' %s"`,
 			jobQueue,
 			jobReq,
-			fmt.Sprintf("dynamore-%s-%s", p.UserID, p.SessionID),
+			trqJobName,
 			outdir,
 			outdir,
 			p.UserID,
@@ -221,7 +226,7 @@ func (p Payload) SSHSubmit(username, jobReq, jobQueue, sshHost, privateKeyFile s
 		cmd = fmt.Sprintf(
 			`bash -l -c "qsub -l %s -N %s -o %s -e %s -F '%s %s %s' %s"`,
 			jobReq,
-			fmt.Sprintf("dynamore-%s-%s", p.UserID, p.SessionID),
+			trqJobName,
 			outdir,
 			outdir,
 			p.UserID,
