@@ -10,6 +10,7 @@ import (
 	"os/user"
 	"path"
 	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -252,22 +253,32 @@ func (p Payload) prepareOutputDir(username string) (string, error) {
 		return "", err
 	}
 
-	var outdir string
-	if outRoot != "" {
-		outdir = path.Join(outRoot, p.OutputDir)
-	} else {
-		outdir = path.Join(u.HomeDir, "dynamore-feature-extraction", p.OutputDir)
-	}
-
-	if err := os.MkdirAll(outdir, 0750); err != nil {
-		return "", err
-	}
-
+	// convert uid/gid to integer.
 	uid, _ := strconv.Atoi(u.Uid)
 	gid, _ := strconv.Atoi(u.Gid)
-	if err := os.Chown(outdir, uid, gid); err != nil {
+
+	// top-level directory
+	rdir := outRoot
+	if rdir == "" {
+		rdir = path.Join(u.HomeDir, "dynamore-feature-extraction")
+	}
+	if err := os.MkdirAll(rdir, 0750); err != nil {
+		return "", err
+	}
+	if err := os.Chown(rdir, uid, gid); err != nil {
 		return "", err
 	}
 
-	return outdir, nil
+	// sub-directories for outputs of this payload
+	for _, p := range strings.Split(p.OutputDir, "/") {
+		rdir = path.Join(rdir, p)
+		if err := os.MkdirAll(rdir, 0750); err != nil {
+			return "", err
+		}
+		if err := os.Chown(rdir, uid, gid); err != nil {
+			return "", err
+		}
+	}
+
+	return rdir, nil
 }
