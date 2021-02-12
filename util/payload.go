@@ -7,7 +7,9 @@ import (
 	"net"
 	"os"
 	"os/exec"
+	"os/user"
 	"path"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -18,6 +20,7 @@ import (
 var (
 	featureStatsExec string
 	qsubExec         string
+	outRoot          string
 )
 
 func init() {
@@ -25,6 +28,7 @@ func init() {
 	// set executable paths from env. vars.
 	featureStatsExec = os.Getenv("FEATURE_STATS_EXEC")
 	qsubExec = os.Getenv("QSUB_EXEC")
+	outRoot = os.Getenv("PAYLOAD_OUTPUT_ROOT")
 
 	// use default if executables are not set.
 	if featureStatsExec == "" {
@@ -63,14 +67,20 @@ func (p Payload) Run(runas string) (string, error) {
 		return "", fmt.Errorf("cannot resolve credential of runner %s: %s", runas, err)
 	}
 
-	cmd := exec.Command(featureStatsExec, p.UserID, p.SessionID)
+	// get and prepare job's stdout/stderr file paths.
+	outdir, err := p.prepareOutputDir(runas)
+	if err != nil {
+		return "", fmt.Errorf("cannot prepare outdir for payload: %s", err)
+	}
+
+	cmd := exec.Command(featureStatsExec, p.UserID, p.SessionID, p.OutputDir)
 
 	cmd.SysProcAttr = &syscall.SysProcAttr{
 		Credential: cred,
 	}
 
 	// stdout file
-	of, err := os.Create(path.Join(p.OutputDir, fmt.Sprintf("%s.%s.out", p.UserID, p.SessionID)))
+	of, err := os.Create(path.Join(outdir, fmt.Sprintf("%s.%s.out", p.UserID, p.SessionID)))
 	if err != nil {
 		return "", err
 	}
@@ -78,7 +88,7 @@ func (p Payload) Run(runas string) (string, error) {
 	cmd.Stdout = of
 
 	// stderr file
-	ef, err := os.Create(path.Join(p.OutputDir, fmt.Sprintf("%s.%s.err", p.UserID, p.SessionID)))
+	ef, err := os.Create(path.Join(outdir, fmt.Sprintf("%s.%s.err", p.UserID, p.SessionID)))
 	if err != nil {
 		return "", err
 	}
@@ -104,13 +114,19 @@ func (p Payload) Submit(runas, jobReq, jobQueue string) (string, error) {
 		return "", fmt.Errorf("cannot resolve credential of runner %s: %s", runas, err)
 	}
 
+	// get and prepare job's stdout/stderr file paths.
+	outdir, err := p.prepareOutputDir(runas)
+	if err != nil {
+		return "", fmt.Errorf("cannot prepare outdir for payload: %s", err)
+	}
+
 	// arguments for `qsubExec`
 	args := []string{
 		"-l", jobReq,
 		"-N", fmt.Sprintf("dynamore-%s-%s", p.UserID, p.SessionID),
-		"-o", p.OutputDir,
-		"-e", p.OutputDir,
-		"-F", fmt.Sprintf("%s %s", p.UserID, p.SessionID),
+		"-o", outdir,
+		"-e", outdir,
+		"-F", fmt.Sprintf("%s %s %s", p.UserID, p.SessionID, p.OutputDir),
 	}
 	if jobQueue != "" {
 		args = append(args, "-q", jobQueue)
@@ -141,6 +157,12 @@ func (p Payload) Submit(runas, jobReq, jobQueue string) (string, error) {
 // pubkey authentication to be established between server and the remote
 // user account.
 func (p Payload) SSHSubmit(username, jobReq, jobQueue, sshHost, privateKeyFile string) (string, error) {
+
+	// get and prepare job's stdout/stderr file paths.
+	outdir, err := p.prepareOutputDir(username)
+	if err != nil {
+		return "", fmt.Errorf("cannot prepare outdir for payload: %s", err)
+	}
 
 	// configure the SSH connection
 	privateKey, err := ioutil.ReadFile(privateKeyFile)
@@ -182,26 +204,28 @@ func (p Payload) SSHSubmit(username, jobReq, jobQueue, sshHost, privateKeyFile s
 	if jobQueue != "" {
 		// command with specific job queue
 		cmd = fmt.Sprintf(
-			`bash -l -c "qsub -q %s -l %s -N %s -o %s -e %s -F '%s %s' %s"`,
+			`bash -l -c "qsub -q %s -l %s -N %s -o %s -e %s -F '%s %s %s' %s"`,
 			jobQueue,
 			jobReq,
 			fmt.Sprintf("dynamore-%s-%s", p.UserID, p.SessionID),
-			p.OutputDir,
-			p.OutputDir,
+			outdir,
+			outdir,
 			p.UserID,
 			p.SessionID,
+			p.OutputDir,
 			featureStatsExec,
 		)
 	} else {
 		// command without specific job queue
 		cmd = fmt.Sprintf(
-			`bash -l -c "qsub -l %s -N %s -o %s -e %s -F '%s %s' %s"`,
+			`bash -l -c "qsub -l %s -N %s -o %s -e %s -F '%s %s %s' %s"`,
 			jobReq,
 			fmt.Sprintf("dynamore-%s-%s", p.UserID, p.SessionID),
-			p.OutputDir,
-			p.OutputDir,
+			outdir,
+			outdir,
 			p.UserID,
 			p.SessionID,
+			p.OutputDir,
 			featureStatsExec,
 		)
 	}
@@ -214,4 +238,36 @@ func (p Payload) SSHSubmit(username, jobReq, jobQueue, sshHost, privateKeyFile s
 	}
 
 	return out.String(), nil
+}
+
+// prepareOutputFiles makes sure the existence of the output directory for
+// storing the stdout/stderr of this payload execution.  The output directory
+// is either within `p.OutputDirRoot` or `${HOME}/dynamore-feature-extraction`
+// if `p.OutputDirRoot` is an empty string.
+func (p Payload) prepareOutputDir(username string) (string, error) {
+
+	// get user object
+	u, err := user.Lookup(username)
+	if err != nil {
+		return "", err
+	}
+
+	var outdir string
+	if outRoot != "" {
+		outdir = path.Join(outRoot, p.OutputDir)
+	} else {
+		outdir = path.Join(u.HomeDir, "dynamore-feature-extraction", p.OutputDir)
+	}
+
+	if err := os.MkdirAll(outdir, 0750); err != nil {
+		return "", err
+	}
+
+	uid, _ := strconv.Atoi(u.Uid)
+	gid, _ := strconv.Atoi(u.Gid)
+	if err := os.Chown(outdir, uid, gid); err != nil {
+		return "", err
+	}
+
+	return outdir, nil
 }
