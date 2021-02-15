@@ -32,3 +32,13 @@ $ make build
 ```
 
 The executable named `dynamore-feature-extraction-runner.linux_amd64` is build into `$GOPATH/bin` which is by default `$HOME/go/bin`.
+
+## Build docker image
+
+The [Makefile](Makefile) provides a target to build and push image to a Docker registry.  With a given release version `{VERSION}` and given Docker registry URL `{DOCKER_REGISTRY}`, one does the following command:
+
+```bash
+$ VERSION={VERSION} DOCKER_REGISTRY={DOCKER_REGISTRY} make docker-release
+```
+
+You will be prompted with login/password the docker registry authentication.  The resulting image will be tagged as `{DOCKER_REGISTRY}/dfe_runnerd:{VERSION}`.
