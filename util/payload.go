@@ -10,7 +10,6 @@ import (
 	"os/user"
 	"path"
 	"strconv"
-	"strings"
 	"syscall"
 	"time"
 
@@ -275,7 +274,7 @@ func (p Payload) prepareOutputDir(username string) (string, error) {
 	}
 
 	// sub-directories for outputs of this payload
-	for _, p := range strings.Split(p.OutputDir, "/") {
+	for _, p := range []string{p.UserID, p.SessionID} {
 		rdir = path.Join(rdir, p)
 		if err := os.MkdirAll(rdir, 0750); err != nil {
 			return "", err
