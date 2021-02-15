@@ -23,9 +23,9 @@ github-release: build
 	scripts/gh-release.sh $(VERSION) false
 
 docker-release:
-	docker build --force-rm -t $(DOCKER_REGISTRY)/dfe_dynamore:$(VERSION) . && \
+	docker build --force-rm -t $(DOCKER_REGISTRY)/dfe_runnerd:$(VERSION) . && \
 		docker login $(DOCKER_REGISTRY) && \
-		docker push $(DOCKER_REGISTRY)/dfe_dynamore:$(VERSION)
+		docker push $(DOCKER_REGISTRY)/dfe_runnerd:$(VERSION)
 
 test:
 	@GOPATH=$(GOPATH) GOOS=$(GOOS) GOARCH=amd64 go test -v github.com/Donders-Institute/dynamore-feature-extraction-runner/...
