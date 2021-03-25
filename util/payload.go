@@ -209,7 +209,8 @@ func (p Payload) SSHSubmit(username, jobReq, jobQueue, sshHost, privateKeyFile s
 	if jobQueue != "" {
 		// command with specific job queue
 		cmd = fmt.Sprintf(
-			`bash -l -c "qsub -q %s -l %s -N %s -o %s -e %s -F '%s %s %s' %s"`,
+			`bash -l -c "JOB_OUTDIR=%s qsub -q %s -l %s -N %s -o %s -e %s -F '%s %s %s' %s"`,
+			outdir,
 			jobQueue,
 			jobReq,
 			trqJobName,
@@ -223,7 +224,8 @@ func (p Payload) SSHSubmit(username, jobReq, jobQueue, sshHost, privateKeyFile s
 	} else {
 		// command without specific job queue
 		cmd = fmt.Sprintf(
-			`bash -l -c "qsub -l %s -N %s -o %s -e %s -F '%s %s %s' %s"`,
+			`bash -l -c "JOB_OUTDIR=%s qsub -l %s -N %s -o %s -e %s -F '%s %s %s' %s"`,
+			outdir,
 			jobReq,
 			trqJobName,
 			outdir,
