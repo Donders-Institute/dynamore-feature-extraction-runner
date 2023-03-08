@@ -1,5 +1,5 @@
 # stage 0: compile go program
-FROM golang:1.13.8 as build
+FROM golang:1.20 as build
 RUN mkdir -p /tmp/app
 WORKDIR /tmp/app
 ADD main.go .
@@ -17,7 +17,7 @@ LABEL donders.ru.nl.app_maintainer "h.lee@donders.ru.nl"
 LABEL donders.ru.nl.app_code_repository "https://github.com/Donders-Institute/dynamore-feature-extraction-runner"
 
 # required RPMs
-RUN yum install -y sssd-client && yum clean all && rm -rf /var/cache/yum/*
+RUN ulimit -n 1024 && yum install -y sssd-client && yum clean all && rm -rf /var/cache/yum/*
 
 # environment variables
 ENV REDIS_URL=redis://localhost:6379/0
